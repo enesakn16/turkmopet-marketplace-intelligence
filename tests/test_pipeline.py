@@ -32,9 +32,10 @@ class MarketplacePipelineTests(unittest.TestCase):
 
             self.assertEqual(len(listings), 1)
             self.assertEqual(result.recommendations[0].target_price, Decimal("1097.22"))
-            rows = list(csv.DictReader(report.open(encoding="utf-8-sig")))
+            with report.open(encoding="utf-8-sig", newline="") as handle:
+                rows = list(csv.DictReader(handle))
             self.assertEqual(rows[0]["required_increase"], "197.22")
-            self.assertIn("warning:low_margin", rows[0]["issues"])
+            self.assertIn("error:negative_contribution", rows[0]["issues"])
 
     def test_rejects_missing_columns(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
