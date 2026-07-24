@@ -6,8 +6,13 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Iterable
 
-from .analysis import analyze_marketplaces, recommend_sale_price
-from .models import ListingSnapshot, MarketplaceAnalysis, PricingRecommendation
+from .analysis import analyze_marketplaces, recommend_best_channels, recommend_sale_price
+from .models import (
+    ChannelRecommendation,
+    ListingSnapshot,
+    MarketplaceAnalysis,
+    PricingRecommendation,
+)
 
 REQUIRED_COLUMNS = {
     "sku",
@@ -29,6 +34,7 @@ class MarketplacePipelineResult:
     listings: tuple[ListingSnapshot, ...]
     analysis: MarketplaceAnalysis
     recommendations: tuple[PricingRecommendation, ...]
+    channel_recommendations: tuple[ChannelRecommendation, ...]
 
 
 def _decimal(value: str, *, field: str, row_number: int) -> Decimal:
@@ -137,6 +143,7 @@ def run_marketplace_pipeline(
         listings=normalized,
         analysis=analysis,
         recommendations=recommendations,
+        channel_recommendations=recommend_best_channels(normalized),
     )
 
 
@@ -158,6 +165,9 @@ def write_report_csv(
     economics_by_key = {
         (item.sku, item.marketplace): item for item in result.analysis.economics
     }
+    best_channel_by_sku = {
+        item.sku: item.marketplace for item in result.channel_recommendations
+    }
 
     with destination.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(
@@ -172,6 +182,7 @@ def write_report_csv(
                 "break_even_price",
                 "target_price",
                 "required_increase",
+                "is_recommended_channel",
                 "issues",
             ],
         )
@@ -191,6 +202,44 @@ def write_report_csv(
                     "break_even_price": recommendation.break_even_price,
                     "target_price": recommendation.target_price,
                     "required_increase": recommendation.required_increase,
+                    "is_recommended_channel": (
+                        "yes"
+                        if best_channel_by_sku.get(listing.sku) == listing.marketplace
+                        else "no"
+                    ),
                     "issues": "|".join(issues_by_key.get(key, ())),
+                }
+            )
+
+
+def write_channel_recommendations_csv(
+    result: MarketplacePipelineResult,
+    path: str | Path,
+) -> None:
+    destination = Path(path)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+
+    with destination.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(
+            handle,
+            fieldnames=[
+                "sku",
+                "recommended_marketplace",
+                "contribution_profit",
+                "contribution_margin",
+                "stock",
+                "evaluated_channels",
+            ],
+        )
+        writer.writeheader()
+        for recommendation in result.channel_recommendations:
+            writer.writerow(
+                {
+                    "sku": recommendation.sku,
+                    "recommended_marketplace": recommendation.marketplace,
+                    "contribution_profit": recommendation.contribution_profit,
+                    "contribution_margin": recommendation.contribution_margin,
+                    "stock": recommendation.stock,
+                    "evaluated_channels": recommendation.evaluated_channels,
                 }
             )
