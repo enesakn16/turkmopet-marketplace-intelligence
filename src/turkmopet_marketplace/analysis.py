@@ -9,6 +9,7 @@ from .models import (
     ListingSnapshot,
     MarketplaceAnalysis,
     MarketplaceIssue,
+    PricingRecommendation,
 )
 
 
@@ -36,6 +37,38 @@ def calculate_channel_economics(listing: ListingSnapshot) -> ChannelEconomics:
         net_revenue=_money(net_revenue),
         contribution_profit=_money(contribution_profit),
         contribution_margin=_rate(contribution_margin),
+    )
+
+
+def recommend_sale_price(
+    listing: ListingSnapshot,
+    *,
+    target_margin: Decimal = Decimal("0.10"),
+) -> PricingRecommendation:
+    if not Decimal("0") <= target_margin < Decimal("1"):
+        raise ValueError("target_margin must be between 0 and 1")
+
+    break_even_denominator = Decimal("1") - listing.commission_rate
+    target_denominator = break_even_denominator - target_margin
+
+    if break_even_denominator <= 0:
+        raise ValueError("commission_rate leaves no revenue for costs")
+    if target_denominator <= 0:
+        raise ValueError("target_margin is not achievable with this commission_rate")
+
+    fixed_costs = listing.product_cost + listing.shipping_cost
+    break_even_price = _money(fixed_costs / break_even_denominator)
+    target_price = _money(fixed_costs / target_denominator)
+    required_increase = _money(max(Decimal("0"), target_price - listing.sale_price))
+
+    return PricingRecommendation(
+        sku=listing.sku,
+        marketplace=listing.marketplace,
+        break_even_price=break_even_price,
+        target_price=target_price,
+        target_margin=_rate(target_margin),
+        current_price=_money(listing.sale_price),
+        required_increase=required_increase,
     )
 
 
