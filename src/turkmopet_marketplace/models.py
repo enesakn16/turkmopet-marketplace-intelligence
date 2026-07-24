@@ -43,6 +43,17 @@ class ChannelEconomics:
 
 
 @dataclass(frozen=True, slots=True)
+class PricingRecommendation:
+    sku: str
+    marketplace: str
+    break_even_price: Decimal
+    target_price: Decimal
+    target_margin: Decimal
+    current_price: Decimal
+    required_increase: Decimal
+
+
+@dataclass(frozen=True, slots=True)
 class MarketplaceIssue:
     sku: str
     marketplace: str
