@@ -54,6 +54,18 @@ class PricingRecommendation:
 
 
 @dataclass(frozen=True, slots=True)
+class ChannelRecommendation:
+    """The strongest in-stock marketplace option for one SKU."""
+
+    sku: str
+    marketplace: str
+    contribution_profit: Decimal
+    contribution_margin: Decimal
+    stock: int
+    evaluated_channels: int
+
+
+@dataclass(frozen=True, slots=True)
 class MarketplaceIssue:
     sku: str
     marketplace: str
