@@ -6,6 +6,7 @@ from typing import Iterable
 
 from .models import (
     ChannelEconomics,
+    ChannelRecommendation,
     ListingSnapshot,
     MarketplaceAnalysis,
     MarketplaceIssue,
@@ -70,6 +71,54 @@ def recommend_sale_price(
         current_price=_money(listing.sale_price),
         required_increase=required_increase,
     )
+
+
+def recommend_best_channels(
+    listings: Iterable[ListingSnapshot],
+) -> tuple[ChannelRecommendation, ...]:
+    """Choose the strongest in-stock channel for each SKU.
+
+    Contribution profit is the primary criterion. Contribution margin, stock and
+    marketplace name provide deterministic tie-breakers. SKUs with no available
+    stock are intentionally omitted because they cannot produce an actionable
+    sales-channel recommendation.
+    """
+
+    by_sku: dict[str, list[ListingSnapshot]] = defaultdict(list)
+    for listing in listings:
+        by_sku[listing.sku].append(listing)
+
+    recommendations: list[ChannelRecommendation] = []
+    for sku, sku_listings in by_sku.items():
+        available = [listing for listing in sku_listings if listing.stock > 0]
+        if not available:
+            continue
+
+        ranked = sorted(
+            (
+                (listing, calculate_channel_economics(listing))
+                for listing in available
+            ),
+            key=lambda item: (
+                -item[1].contribution_profit,
+                -item[1].contribution_margin,
+                -item[0].stock,
+                item[0].marketplace.casefold(),
+            ),
+        )
+        best_listing, best_economics = ranked[0]
+        recommendations.append(
+            ChannelRecommendation(
+                sku=sku,
+                marketplace=best_listing.marketplace,
+                contribution_profit=best_economics.contribution_profit,
+                contribution_margin=best_economics.contribution_margin,
+                stock=best_listing.stock,
+                evaluated_channels=len(available),
+            )
+        )
+
+    return tuple(sorted(recommendations, key=lambda item: item.sku))
 
 
 def analyze_marketplaces(
