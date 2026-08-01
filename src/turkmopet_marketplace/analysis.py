@@ -13,7 +13,6 @@ from .models import (
     PricingRecommendation,
 )
 
-
 MONEY = Decimal("0.01")
 RATE = Decimal("0.0001")
 
@@ -28,10 +27,15 @@ def _rate(value: Decimal) -> Decimal:
 
 def calculate_channel_economics(listing: ListingSnapshot) -> ChannelEconomics:
     commission = listing.sale_price * listing.commission_rate
-    net_revenue = listing.sale_price - commission - listing.shipping_cost
+    net_revenue = (
+        listing.sale_price
+        - commission
+        - listing.shipping_cost
+        - listing.service_fee
+        - listing.seller_discount
+    )
     contribution_profit = net_revenue - listing.product_cost
     contribution_margin = contribution_profit / listing.sale_price
-
     return ChannelEconomics(
         sku=listing.sku,
         marketplace=listing.marketplace,
@@ -48,20 +52,21 @@ def recommend_sale_price(
 ) -> PricingRecommendation:
     if not Decimal("0") <= target_margin < Decimal("1"):
         raise ValueError("target_margin must be between 0 and 1")
-
     break_even_denominator = Decimal("1") - listing.commission_rate
     target_denominator = break_even_denominator - target_margin
-
     if break_even_denominator <= 0:
         raise ValueError("commission_rate leaves no revenue for costs")
     if target_denominator <= 0:
         raise ValueError("target_margin is not achievable with this commission_rate")
-
-    fixed_costs = listing.product_cost + listing.shipping_cost
+    fixed_costs = (
+        listing.product_cost
+        + listing.shipping_cost
+        + listing.service_fee
+        + listing.seller_discount
+    )
     break_even_price = _money(fixed_costs / break_even_denominator)
     target_price = _money(fixed_costs / target_denominator)
     required_increase = _money(max(Decimal("0"), target_price - listing.sale_price))
-
     return PricingRecommendation(
         sku=listing.sku,
         marketplace=listing.marketplace,
@@ -76,29 +81,16 @@ def recommend_sale_price(
 def recommend_best_channels(
     listings: Iterable[ListingSnapshot],
 ) -> tuple[ChannelRecommendation, ...]:
-    """Choose the strongest in-stock channel for each SKU.
-
-    Contribution profit is the primary criterion. Contribution margin, stock and
-    marketplace name provide deterministic tie-breakers. SKUs with no available
-    stock are intentionally omitted because they cannot produce an actionable
-    sales-channel recommendation.
-    """
-
     by_sku: dict[str, list[ListingSnapshot]] = defaultdict(list)
     for listing in listings:
         by_sku[listing.sku].append(listing)
-
     recommendations: list[ChannelRecommendation] = []
     for sku, sku_listings in by_sku.items():
         available = [listing for listing in sku_listings if listing.stock > 0]
         if not available:
             continue
-
         ranked = sorted(
-            (
-                (listing, calculate_channel_economics(listing))
-                for listing in available
-            ),
+            ((listing, calculate_channel_economics(listing)) for listing in available),
             key=lambda item: (
                 -item[1].contribution_profit,
                 -item[1].contribution_margin,
@@ -117,7 +109,6 @@ def recommend_best_channels(
                 evaluated_channels=len(available),
             )
         )
-
     return tuple(sorted(recommendations, key=lambda item: item.sku))
 
 
@@ -131,11 +122,9 @@ def analyze_marketplaces(
         raise ValueError("minimum_margin must be between -1 and 1")
     if not Decimal("0") <= price_gap_threshold <= Decimal("1"):
         raise ValueError("price_gap_threshold must be between 0 and 1")
-
     normalized = tuple(listings)
     economics = tuple(calculate_channel_economics(item) for item in normalized)
     issues: list[MarketplaceIssue] = []
-
     for item, result in zip(normalized, economics, strict=True):
         if result.contribution_profit < 0:
             issues.append(
@@ -145,8 +134,8 @@ def analyze_marketplaces(
                     code="negative_contribution",
                     severity="error",
                     message=(
-                        f"Satış, ürün maliyeti + komisyon + kargoyu karşılamıyor; "
-                        f"katkı kârı {result.contribution_profit} TL."
+                        "Satış; ürün maliyeti, komisyon, kargo, hizmet bedeli ve "
+                        f"satıcı indirimini karşılamıyor; katkı kârı {result.contribution_profit} TL."
                     ),
                 )
             )
@@ -163,7 +152,6 @@ def analyze_marketplaces(
                     ),
                 )
             )
-
         if item.stock == 0:
             issues.append(
                 MarketplaceIssue(
@@ -174,11 +162,9 @@ def analyze_marketplaces(
                     message="Listeleme satışa açık olabilir ancak kanal stoğu sıfır.",
                 )
             )
-
     by_sku: dict[str, list[ListingSnapshot]] = defaultdict(list)
     for item in normalized:
         by_sku[item.sku].append(item)
-
     for sku, sku_listings in by_sku.items():
         if len(sku_listings) < 2:
             continue
@@ -199,7 +185,6 @@ def analyze_marketplaces(
                         ),
                     )
                 )
-
     ordered_issues = tuple(
         sorted(issues, key=lambda issue: (issue.sku, issue.marketplace, issue.code))
     )
