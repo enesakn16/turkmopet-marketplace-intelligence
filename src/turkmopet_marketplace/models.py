@@ -15,6 +15,8 @@ class ListingSnapshot:
     shipping_cost: Decimal
     product_cost: Decimal
     stock: int
+    service_fee: Decimal = Decimal("0")
+    seller_discount: Decimal = Decimal("0")
 
     def __post_init__(self) -> None:
         if not self.sku.strip():
@@ -29,6 +31,10 @@ class ListingSnapshot:
             raise ValueError("shipping_cost must not be negative")
         if self.product_cost < 0:
             raise ValueError("product_cost must not be negative")
+        if self.service_fee < 0:
+            raise ValueError("service_fee must not be negative")
+        if self.seller_discount < 0:
+            raise ValueError("seller_discount must not be negative")
         if self.stock < 0:
             raise ValueError("stock must not be negative")
 
