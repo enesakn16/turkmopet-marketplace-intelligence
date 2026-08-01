@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from decimal import Decimal
 
+from .adapters import read_trendyol_csv
 from .pipeline import (
     MarketplaceImportError,
     read_listings_csv,
@@ -17,6 +18,12 @@ def build_parser() -> argparse.ArgumentParser:
         description="Pazaryeri listelemelerini kârlılık ve fiyat hedefleri açısından analiz eder."
     )
     parser.add_argument("--input", required=True, help="Listeleme CSV dosyası")
+    parser.add_argument(
+        "--input-format",
+        choices=("normalized", "trendyol"),
+        default="normalized",
+        help="CSV şeması; varsayılan normalize edilmiş ortak formattır",
+    )
     parser.add_argument("--output", required=True, help="Analiz raporu CSV dosyası")
     parser.add_argument(
         "--recommendations-output",
@@ -31,7 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     try:
-        listings = read_listings_csv(args.input)
+        reader = read_trendyol_csv if args.input_format == "trendyol" else read_listings_csv
+        listings = reader(args.input)
         result = run_marketplace_pipeline(
             listings,
             minimum_margin=Decimal(args.minimum_margin),
