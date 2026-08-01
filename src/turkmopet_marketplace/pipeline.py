@@ -38,8 +38,19 @@ class MarketplacePipelineResult:
     channel_recommendations: tuple[ChannelRecommendation, ...]
 
 
+def _normalize_decimal(value: str) -> str:
+    normalized = value.strip().replace(" ", "")
+    if "," in normalized and "." in normalized:
+        if normalized.rfind(",") > normalized.rfind("."):
+            return normalized.replace(".", "").replace(",", ".")
+        return normalized.replace(",", "")
+    if "," in normalized:
+        return normalized.replace(",", ".")
+    return normalized
+
+
 def _decimal(value: str, *, field: str, row_number: int) -> Decimal:
-    normalized = value.strip().replace(",", ".")
+    normalized = _normalize_decimal(value)
     try:
         return Decimal(normalized)
     except (InvalidOperation, ValueError) as exc:
