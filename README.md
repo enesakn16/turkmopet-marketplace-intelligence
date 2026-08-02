@@ -51,15 +51,24 @@ marketplace-analyze \
   --output reports/hepsiburada-analysis.csv
 ```
 
-Hepsiburada adaptörü şu başlıkları otomatik eşler:
+N11 dışa aktarımı:
 
-- SKU: `Satıcı Stok Kodu`, `Merchant SKU`, `Stok Kodu`, `SKU` veya `Barkod`
-- Fiyat: `Fiyat`, `Satış Fiyatı`, `Listing Price` veya `Sale Price`
-- Komisyon: `Komisyon Oranı` veya `Commission Rate`
-- Kargo: `Kargo Bedeli`, `Kargo Maliyeti` veya `Shipping Cost`
-- Maliyet: `Ürün Maliyeti`, `Maliyet` veya `Product Cost`
-- Stok: `Satılabilir Stok`, `Stok Adedi`, `Stok` veya `Available Stock`
-- İsteğe bağlı maliyetler: `İşlem Bedeli` / `Hizmet Bedeli` ve `Kampanya İndirimi` / `Satıcı İndirimi`
+```bash
+marketplace-analyze \
+  --input n11-listings.csv \
+  --input-format n11 \
+  --output reports/n11-analysis.csv
+```
+
+N11 adaptörü şu başlıkları otomatik eşler:
+
+- SKU: `Mağaza Ürün Kodu`, `Seller Product Code`, `Seller SKU`, `Stok Kodu`, `SKU` veya `Barkod`
+- Fiyat: `Mağaza Satış Fiyatı`, `Satış Fiyatı`, `Fiyat`, `Price` veya `Sale Price`
+- Komisyon: `Komisyon Oranı`, `Komisyon`, `Commission Rate` veya `Commission`
+- Kargo: `Kargo Bedeli`, `Kargo Maliyeti`, `Shipping Cost` veya `Cargo Cost`
+- Maliyet: `Ürün Maliyeti`, `Maliyet`, `Product Cost` veya `Cost`
+- Stok: `Stok Miktarı`, `Stok Adedi`, `Stok`, `Quantity` veya `Stock`
+- İsteğe bağlı maliyetler: `İşlem Bedeli` / `Hizmet Bedeli` ve `Mağaza İndirimi` / `Satıcı İndirimi`
 
 Başlıklar Türkçe karakter, boşluk ve alt çizgi farklılıklarına karşı normalize edilir. İsteğe bağlı maliyet kolonları yoksa `0` kabul edilir. Tekrarlı SKU satırları ve eksik zorunlu kolonlar kontrollü hata üretir.
 
@@ -121,7 +130,7 @@ MarketplaceAnalysis
 CSV analiz ve kanal önerisi raporları
 ```
 
-- `adapters.py`: Trendyol ve Hepsiburada başlık normalizasyonu
+- `adapters.py`: Trendyol, Hepsiburada ve N11 başlık normalizasyonu
 - `models.py`: doğrulanan, değiştirilemez domain modelleri
 - `analysis.py`: fiyat, kârlılık ve kanal tutarlılığı kuralları
 - `pipeline.py`: CSV içe aktarma, analiz ve atomik rapor yayını
@@ -135,10 +144,9 @@ CSV analiz ve kanal önerisi raporları
 
 ## Yol haritası
 
-1. N11 CSV adaptörü
-2. Satış adediyle ağırlıklandırılmış kanal performansı
-3. Kampanya ve kupon etkisinin dönemsel karşılaştırılması
-4. Excel/JSON raporu ve görsel yönetim paneli
+1. Satış adediyle ağırlıklandırılmış kanal performansı
+2. Kampanya ve kupon etkisinin dönemsel karşılaştırılması
+3. Excel/JSON raporu ve görsel yönetim paneli
 
 ## AI destekli geliştirme
 

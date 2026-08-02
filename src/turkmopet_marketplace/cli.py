@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from decimal import Decimal
 
-from .adapters import read_hepsiburada_csv, read_trendyol_csv
+from .adapters import read_hepsiburada_csv, read_n11_csv, read_trendyol_csv
 from .pipeline import (
     MarketplaceImportError,
     read_listings_csv,
@@ -20,7 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--input", required=True, help="Listeleme CSV dosyası")
     parser.add_argument(
         "--input-format",
-        choices=("normalized", "trendyol", "hepsiburada"),
+        choices=("normalized", "trendyol", "hepsiburada", "n11"),
         default="normalized",
         help="CSV şeması; varsayılan normalize edilmiş ortak formattır",
     )
@@ -41,6 +41,7 @@ def main() -> int:
         "normalized": read_listings_csv,
         "trendyol": read_trendyol_csv,
         "hepsiburada": read_hepsiburada_csv,
+        "n11": read_n11_csv,
     }
     try:
         listings = readers[args.input_format](args.input)
