@@ -21,11 +21,22 @@ _TRENDYOL_ALIASES = {
 }
 
 _HEPSIBURADA_ALIASES = {
+    "sku": ("satici stok kodu", "satıcı stok kodu", "merchant sku", "merchant_sku", "stok kodu", "sku", "barkod", "barcode"),
+    "sale_price": ("satis fiyati", "satış fiyatı", "fiyat", "listing price", "sale price", "sale_price"),
+    "commission_rate": ("komisyon orani", "komisyon oranı", "commission rate", "commission_rate"),
+    "shipping_cost": ("kargo bedeli", "kargo maliyeti", "shipping cost", "shipping_cost"),
+    "product_cost": ("urun maliyeti", "ürün maliyeti", "maliyet", "product cost", "product_cost"),
+    "stock": ("satilabilir stok", "satılabilir stok", "stok adedi", "stok", "available stock", "stock"),
+    "service_fee": ("hizmet bedeli", "islem bedeli", "işlem bedeli", "service fee", "service_fee"),
+    "seller_discount": ("satici indirimi", "satıcı indirimi", "kampanya indirimi", "seller discount", "seller_discount"),
+}
+
+_N11_ALIASES = {
     "sku": (
-        "satici stok kodu",
-        "satıcı stok kodu",
-        "merchant sku",
-        "merchant_sku",
+        "magaza urun kodu",
+        "mağaza ürün kodu",
+        "seller product code",
+        "seller sku",
         "stok kodu",
         "sku",
         "barkod",
@@ -34,36 +45,38 @@ _HEPSIBURADA_ALIASES = {
     "sale_price": (
         "satis fiyati",
         "satış fiyatı",
+        "magaza satis fiyati",
+        "mağaza satış fiyatı",
         "fiyat",
-        "listing price",
+        "price",
         "sale price",
-        "sale_price",
     ),
     "commission_rate": (
         "komisyon orani",
         "komisyon oranı",
+        "komisyon",
         "commission rate",
-        "commission_rate",
+        "commission",
     ),
     "shipping_cost": (
         "kargo bedeli",
         "kargo maliyeti",
         "shipping cost",
-        "shipping_cost",
+        "cargo cost",
     ),
     "product_cost": (
         "urun maliyeti",
         "ürün maliyeti",
         "maliyet",
         "product cost",
-        "product_cost",
+        "cost",
     ),
     "stock": (
-        "satilabilir stok",
-        "satılabilir stok",
+        "stok miktari",
+        "stok miktarı",
         "stok adedi",
         "stok",
-        "available stock",
+        "quantity",
         "stock",
     ),
     "service_fee": (
@@ -71,14 +84,15 @@ _HEPSIBURADA_ALIASES = {
         "islem bedeli",
         "işlem bedeli",
         "service fee",
-        "service_fee",
+        "transaction fee",
     ),
     "seller_discount": (
+        "magaza indirimi",
+        "mağaza indirimi",
         "satici indirimi",
         "satıcı indirimi",
         "kampanya indirimi",
         "seller discount",
-        "seller_discount",
     ),
 }
 
@@ -129,11 +143,7 @@ def _read_marketplace_csv(
     seen: set[str] = set()
     with handle:
         reader = csv.DictReader(handle)
-        columns = _resolve_columns(
-            reader.fieldnames,
-            aliases=aliases,
-            marketplace=marketplace,
-        )
+        columns = _resolve_columns(reader.fieldnames, aliases=aliases, marketplace=marketplace)
         for row_number, row in enumerate(reader, start=2):
             sku = (row.get(columns["sku"]) or "").strip()
             key = sku.casefold()
@@ -161,16 +171,12 @@ def _read_marketplace_csv(
 
 
 def read_trendyol_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
-    return _read_marketplace_csv(
-        path,
-        marketplace="Trendyol",
-        aliases=_TRENDYOL_ALIASES,
-    )
+    return _read_marketplace_csv(path, marketplace="Trendyol", aliases=_TRENDYOL_ALIASES)
 
 
 def read_hepsiburada_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
-    return _read_marketplace_csv(
-        path,
-        marketplace="Hepsiburada",
-        aliases=_HEPSIBURADA_ALIASES,
-    )
+    return _read_marketplace_csv(path, marketplace="Hepsiburada", aliases=_HEPSIBURADA_ALIASES)
+
+
+def read_n11_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
+    return _read_marketplace_csv(path, marketplace="N11", aliases=_N11_ALIASES)
