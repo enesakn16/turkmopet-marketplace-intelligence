@@ -6,18 +6,6 @@ Trendyol, Hepsiburada, N11 ve diğer pazaryerlerindeki ürün listelemelerini; f
 
 Aynı motosiklet parçası farklı pazaryerlerinde farklı komisyon ve kargo maliyetleriyle satılıyor. Yalnızca satış fiyatına bakmak, zarar eden veya hedef marjın altında kalan kanalları gizleyebilir. Bu proje her listelemeyi aynı finansal modele çevirerek kanal bazlı katkı kârını ve riskleri görünür hâle getirir.
 
-## İlk sürümde bulunanlar
-
-- Komisyon sonrası net gelir hesabı
-- Ürün maliyeti ve kargo sonrası katkı kârı
-- Katkı marjı hesabı
-- Zarar eden listeleme tespiti
-- Hedef marjın altında kalan kanal uyarısı
-- Sıfır stok uyarısı
-- Aynı SKU için kanallar arası fiyat farkı denetimi
-- `Decimal` tabanlı para hesabı
-- Python 3.12 CI, test ve derleme kontrolü
-
 ## Kurulum
 
 ```bash
@@ -34,7 +22,48 @@ python -m venv .venv
 python -m pip install -e .
 ```
 
-## Kullanım
+## CSV analizi
+
+Normalize edilmiş ortak CSV:
+
+```bash
+marketplace-analyze \
+  --input listings.csv \
+  --input-format normalized \
+  --output reports/analysis.csv
+```
+
+Trendyol dışa aktarımı:
+
+```bash
+marketplace-analyze \
+  --input trendyol-listings.csv \
+  --input-format trendyol \
+  --output reports/trendyol-analysis.csv
+```
+
+Hepsiburada dışa aktarımı:
+
+```bash
+marketplace-analyze \
+  --input hepsiburada-listings.csv \
+  --input-format hepsiburada \
+  --output reports/hepsiburada-analysis.csv
+```
+
+Hepsiburada adaptörü şu başlıkları otomatik eşler:
+
+- SKU: `Satıcı Stok Kodu`, `Merchant SKU`, `Stok Kodu`, `SKU` veya `Barkod`
+- Fiyat: `Fiyat`, `Satış Fiyatı`, `Listing Price` veya `Sale Price`
+- Komisyon: `Komisyon Oranı` veya `Commission Rate`
+- Kargo: `Kargo Bedeli`, `Kargo Maliyeti` veya `Shipping Cost`
+- Maliyet: `Ürün Maliyeti`, `Maliyet` veya `Product Cost`
+- Stok: `Satılabilir Stok`, `Stok Adedi`, `Stok` veya `Available Stock`
+- İsteğe bağlı maliyetler: `İşlem Bedeli` / `Hizmet Bedeli` ve `Kampanya İndirimi` / `Satıcı İndirimi`
+
+Başlıklar Türkçe karakter, boşluk ve alt çizgi farklılıklarına karşı normalize edilir. İsteğe bağlı maliyet kolonları yoksa `0` kabul edilir. Tekrarlı SKU satırları ve eksik zorunlu kolonlar kontrollü hata üretir.
+
+## Python kullanımı
 
 ```python
 from decimal import Decimal
@@ -81,35 +110,35 @@ python -m compileall -q src tests
 ## Mimari
 
 ```text
+CSV sağlayıcı adaptörü
+      ↓
 ListingSnapshot
       ↓
 calculate_channel_economics
       ↓
-ChannelEconomics
+MarketplaceAnalysis
       ↓
-analyze_marketplaces
-      ↓
-MarketplaceAnalysis (ekonomi + açıklanabilir sorunlar)
+CSV analiz ve kanal önerisi raporları
 ```
 
+- `adapters.py`: Trendyol ve Hepsiburada başlık normalizasyonu
 - `models.py`: doğrulanan, değiştirilemez domain modelleri
 - `analysis.py`: fiyat, kârlılık ve kanal tutarlılığı kuralları
-- `tests/test_analysis.py`: finansal hesap ve risk senaryoları
+- `pipeline.py`: CSV içe aktarma, analiz ve atomik rapor yayını
 - `.github/workflows/ci.yml`: otomatik test ve derleme kontrolü
 
 ## Teknik kararlar
 
 - Para hesabında kayan nokta hatalarını önlemek için `float` yerine `Decimal` kullanılır.
-- Uyarılar yalnızca puan üretmez; kod, önem seviyesi ve Türkçe açıklama döndürür.
-- Pazaryeri verisi henüz herhangi bir sağlayıcıya bağlanmamıştır. Çekirdek bağımsız tutulduğu için CSV, API veya panel adaptörleri sonradan eklenebilir.
+- Uyarılar kod, önem seviyesi ve Türkçe açıklama döndürür.
+- Sağlayıcı CSV şemaları adaptör katmanında ortak modele çevrilir; finansal analiz sağlayıcıdan bağımsız kalır.
 
 ## Yol haritası
 
-1. Trendyol, Hepsiburada ve N11 CSV adaptörleri
+1. N11 CSV adaptörü
 2. Satış adediyle ağırlıklandırılmış kanal performansı
-3. Minimum satış fiyatı önerisi
-4. Kampanya ve kupon etkisi
-5. Excel/JSON raporu ve görsel yönetim paneli
+3. Kampanya ve kupon etkisinin dönemsel karşılaştırılması
+4. Excel/JSON raporu ve görsel yönetim paneli
 
 ## AI destekli geliştirme
 

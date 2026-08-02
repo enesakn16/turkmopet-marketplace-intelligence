@@ -4,6 +4,7 @@ import csv
 import re
 import unicodedata
 from pathlib import Path
+from typing import Mapping
 
 from .models import ListingSnapshot
 from .pipeline import MarketplaceImportError, _decimal, _integer, _optional_decimal
@@ -18,6 +19,69 @@ _TRENDYOL_ALIASES = {
     "service_fee": ("hizmet bedeli", "hizmet_bedeli", "service fee", "service_fee"),
     "seller_discount": ("satici indirimi", "satıcı indirimi", "satici_indirimi", "seller discount", "seller_discount"),
 }
+
+_HEPSIBURADA_ALIASES = {
+    "sku": (
+        "satici stok kodu",
+        "satıcı stok kodu",
+        "merchant sku",
+        "merchant_sku",
+        "stok kodu",
+        "sku",
+        "barkod",
+        "barcode",
+    ),
+    "sale_price": (
+        "satis fiyati",
+        "satış fiyatı",
+        "fiyat",
+        "listing price",
+        "sale price",
+        "sale_price",
+    ),
+    "commission_rate": (
+        "komisyon orani",
+        "komisyon oranı",
+        "commission rate",
+        "commission_rate",
+    ),
+    "shipping_cost": (
+        "kargo bedeli",
+        "kargo maliyeti",
+        "shipping cost",
+        "shipping_cost",
+    ),
+    "product_cost": (
+        "urun maliyeti",
+        "ürün maliyeti",
+        "maliyet",
+        "product cost",
+        "product_cost",
+    ),
+    "stock": (
+        "satilabilir stok",
+        "satılabilir stok",
+        "stok adedi",
+        "stok",
+        "available stock",
+        "stock",
+    ),
+    "service_fee": (
+        "hizmet bedeli",
+        "islem bedeli",
+        "işlem bedeli",
+        "service fee",
+        "service_fee",
+    ),
+    "seller_discount": (
+        "satici indirimi",
+        "satıcı indirimi",
+        "kampanya indirimi",
+        "seller discount",
+        "seller_discount",
+    ),
+}
+
 _REQUIRED = {"sku", "sale_price", "commission_rate", "shipping_cost", "product_cost", "stock"}
 
 
@@ -27,11 +91,16 @@ def _normalize_header(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", ascii_text).strip()
 
 
-def _resolve_columns(fieldnames: list[str] | None) -> dict[str, str]:
+def _resolve_columns(
+    fieldnames: list[str] | None,
+    *,
+    aliases: Mapping[str, tuple[str, ...]],
+    marketplace: str,
+) -> dict[str, str]:
     normalized = {_normalize_header(name): name for name in fieldnames or []}
     resolved: dict[str, str] = {}
-    for target, aliases in _TRENDYOL_ALIASES.items():
-        for alias in aliases:
+    for target, candidates in aliases.items():
+        for alias in candidates:
             source = normalized.get(_normalize_header(alias))
             if source is not None:
                 resolved[target] = source
@@ -39,34 +108,43 @@ def _resolve_columns(fieldnames: list[str] | None) -> dict[str, str]:
     missing = sorted(_REQUIRED - resolved.keys())
     if missing:
         raise MarketplaceImportError(
-            "Trendyol CSV kolonları eşleştirilemedi: " + ", ".join(missing)
+            f"{marketplace} CSV kolonları eşleştirilemedi: " + ", ".join(missing)
         )
     return resolved
 
 
-def read_trendyol_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
+def _read_marketplace_csv(
+    path: str | Path,
+    *,
+    marketplace: str,
+    aliases: Mapping[str, tuple[str, ...]],
+) -> tuple[ListingSnapshot, ...]:
     source = Path(path)
     try:
         handle = source.open("r", encoding="utf-8-sig", newline="")
     except OSError as exc:
-        raise MarketplaceImportError(f"Trendyol CSV dosyası açılamadı: {source}") from exc
+        raise MarketplaceImportError(f"{marketplace} CSV dosyası açılamadı: {source}") from exc
 
     listings: list[ListingSnapshot] = []
     seen: set[str] = set()
     with handle:
         reader = csv.DictReader(handle)
-        columns = _resolve_columns(reader.fieldnames)
+        columns = _resolve_columns(
+            reader.fieldnames,
+            aliases=aliases,
+            marketplace=marketplace,
+        )
         for row_number, row in enumerate(reader, start=2):
             sku = (row.get(columns["sku"]) or "").strip()
             key = sku.casefold()
             if key in seen:
                 raise MarketplaceImportError(
-                    f"Satır {row_number}: aynı Trendyol SKU birden fazla kez tanımlanmış"
+                    f"Satır {row_number}: aynı {marketplace} SKU birden fazla kez tanımlanmış"
                 )
             try:
                 listing = ListingSnapshot(
                     sku=sku,
-                    marketplace="Trendyol",
+                    marketplace=marketplace,
                     sale_price=_decimal(row.get(columns["sale_price"]) or "", field="sale_price", row_number=row_number),
                     commission_rate=_decimal(row.get(columns["commission_rate"]) or "", field="commission_rate", row_number=row_number),
                     shipping_cost=_decimal(row.get(columns["shipping_cost"]) or "", field="shipping_cost", row_number=row_number),
@@ -80,3 +158,19 @@ def read_trendyol_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
             seen.add(key)
             listings.append(listing)
     return tuple(listings)
+
+
+def read_trendyol_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
+    return _read_marketplace_csv(
+        path,
+        marketplace="Trendyol",
+        aliases=_TRENDYOL_ALIASES,
+    )
+
+
+def read_hepsiburada_csv(path: str | Path) -> tuple[ListingSnapshot, ...]:
+    return _read_marketplace_csv(
+        path,
+        marketplace="Hepsiburada",
+        aliases=_HEPSIBURADA_ALIASES,
+    )
