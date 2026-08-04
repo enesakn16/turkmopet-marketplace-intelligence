@@ -10,6 +10,8 @@ from .pipeline import MarketplaceImportError
 
 MONEY = Decimal("0.01")
 RATE = Decimal("0.0001")
+DEFAULT_CRITICAL_DECLINE = Decimal("0.20")
+DEFAULT_WARNING_DECLINE = Decimal("0.05")
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,10 +35,12 @@ class PerformanceChange:
     previous_profit: Decimal
     current_profit: Decimal
     profit_delta: Decimal
+    profit_change_rate: Decimal | None
     previous_margin: Decimal
     current_margin: Decimal
     margin_delta: Decimal
     movement: str
+    alert_level: str
 
 
 def _decimal(value: str, *, field: str, row_number: int) -> Decimal:
@@ -46,6 +50,51 @@ def _decimal(value: str, *, field: str, row_number: int) -> Decimal:
         raise MarketplaceImportError(
             f"Satır {row_number}: {field} geçerli bir sayı değil: {value!r}"
         ) from exc
+
+
+def _validate_decline_thresholds(
+    *, critical_decline: Decimal, warning_decline: Decimal
+) -> None:
+    if warning_decline <= 0 or critical_decline <= 0:
+        raise ValueError("Gerileme eşikleri sıfırdan büyük olmalıdır")
+    if warning_decline >= critical_decline:
+        raise ValueError("Uyarı eşiği kritik eşikten küçük olmalıdır")
+    if critical_decline > 1:
+        raise ValueError("Kritik gerileme eşiği 1 değerini aşamaz")
+
+
+def _profit_change_rate(previous: Decimal, current: Decimal) -> Decimal | None:
+    delta = current - previous
+    if previous > 0:
+        return (delta / previous).quantize(RATE, rounding=ROUND_HALF_UP)
+    if previous < 0:
+        return (delta / abs(previous)).quantize(RATE, rounding=ROUND_HALF_UP)
+    return None
+
+
+def _alert_level(
+    *,
+    movement: str,
+    previous_profit: Decimal,
+    current_profit: Decimal,
+    profit_change_rate: Decimal | None,
+    critical_decline: Decimal,
+    warning_decline: Decimal,
+) -> str:
+    if movement == "missing":
+        return "critical"
+    if movement != "declined":
+        return "stable"
+    if previous_profit == 0 and current_profit < 0:
+        return "critical"
+    if profit_change_rate is None:
+        return "warning"
+    decline = -profit_change_rate
+    if decline >= critical_decline:
+        return "critical"
+    if decline >= warning_decline:
+        return "warning"
+    return "stable"
 
 
 def read_performance_csv(path: str | Path) -> tuple[PerformanceSnapshot, ...]:
@@ -110,7 +159,13 @@ def read_performance_csv(path: str | Path) -> tuple[PerformanceSnapshot, ...]:
 def compare_performance_periods(
     previous: Iterable[PerformanceSnapshot],
     current: Iterable[PerformanceSnapshot],
+    *,
+    critical_decline: Decimal = DEFAULT_CRITICAL_DECLINE,
+    warning_decline: Decimal = DEFAULT_WARNING_DECLINE,
 ) -> tuple[PerformanceChange, ...]:
+    _validate_decline_thresholds(
+        critical_decline=critical_decline, warning_decline=warning_decline
+    )
     previous_map = {item.marketplace.casefold(): item for item in previous}
     current_map = {item.marketplace.casefold(): item for item in current}
     names = {key: item.marketplace for key, item in previous_map.items()}
@@ -138,6 +193,7 @@ def compare_performance_periods(
             movement = "declined"
         else:
             movement = "stable"
+        change_rate = _profit_change_rate(previous_profit, current_profit)
         changes.append(
             PerformanceChange(
                 marketplace=names[key],
@@ -150,18 +206,29 @@ def compare_performance_periods(
                 previous_profit=previous_profit.quantize(MONEY, rounding=ROUND_HALF_UP),
                 current_profit=current_profit.quantize(MONEY, rounding=ROUND_HALF_UP),
                 profit_delta=(current_profit - previous_profit).quantize(MONEY, rounding=ROUND_HALF_UP),
+                profit_change_rate=change_rate,
                 previous_margin=previous_margin.quantize(RATE, rounding=ROUND_HALF_UP),
                 current_margin=current_margin.quantize(RATE, rounding=ROUND_HALF_UP),
                 margin_delta=(current_margin - previous_margin).quantize(RATE, rounding=ROUND_HALF_UP),
                 movement=movement,
+                alert_level=_alert_level(
+                    movement=movement,
+                    previous_profit=previous_profit,
+                    current_profit=current_profit,
+                    profit_change_rate=change_rate,
+                    critical_decline=critical_decline,
+                    warning_decline=warning_decline,
+                ),
             )
         )
-    priority = {"declined": 0, "missing": 1, "improved": 2, "new": 3, "stable": 4}
+    alert_priority = {"critical": 0, "warning": 1, "stable": 2}
+    movement_priority = {"declined": 0, "missing": 1, "improved": 2, "new": 3, "stable": 4}
     return tuple(
         sorted(
             changes,
             key=lambda item: (
-                priority[item.movement],
+                alert_priority[item.alert_level],
+                movement_priority[item.movement],
                 item.profit_delta,
                 item.marketplace.casefold(),
             ),
@@ -184,12 +251,18 @@ def write_performance_changes(changes: Iterable[PerformanceChange], path: str | 
             "previous_profit",
             "current_profit",
             "profit_delta",
+            "profit_change_rate",
             "previous_margin",
             "current_margin",
             "margin_delta",
             "movement",
+            "alert_level",
         ]
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         for item in changes:
-            writer.writerow({field: getattr(item, field) for field in fieldnames})
+            row = {field: getattr(item, field) for field in fieldnames}
+            row["profit_change_rate"] = (
+                "" if item.profit_change_rate is None else item.profit_change_rate
+            )
+            writer.writerow(row)
