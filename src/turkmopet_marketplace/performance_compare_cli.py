@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from decimal import Decimal, InvalidOperation
 
+from .decline_tasks import synchronize_decline_tasks
 from .performance_compare import (
     DEFAULT_CRITICAL_DECLINE,
     DEFAULT_WARNING_DECLINE,
@@ -31,6 +32,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--current", required=True, help="Güncel dönem performans CSV dosyası")
     parser.add_argument("--output", required=True, help="Dönem karşılaştırma CSV dosyası")
     parser.add_argument(
+        "--task-database",
+        help="Kritik gerilemeleri kalıcı operasyon görevlerine yazacak SQLite dosyası",
+    )
+    parser.add_argument(
         "--critical-decline",
         type=_rate,
         default=DEFAULT_CRITICAL_DECLINE,
@@ -57,15 +62,21 @@ def main() -> int:
             warning_decline=args.warning_decline,
         )
         write_performance_changes(changes, args.output)
-    except (MarketplaceImportError, ValueError) as exc:
+        tasks = (
+            synchronize_decline_tasks(changes, args.task_database)
+            if args.task_database
+            else ()
+        )
+    except (MarketplaceImportError, OSError, ValueError) as exc:
         print(f"Hata: {exc}")
         return 2
 
     critical = sum(item.alert_level == "critical" for item in changes)
     warning = sum(item.alert_level == "warning" for item in changes)
+    task_summary = f"; {len(tasks)} görev senkronize edildi" if args.task_database else ""
     print(
         f"{len(changes)} pazaryeri karşılaştırıldı; "
-        f"{critical} kritik, {warning} uyarı seviyesi bulundu."
+        f"{critical} kritik, {warning} uyarı seviyesi bulundu{task_summary}."
     )
     return 1 if critical else 0
 
