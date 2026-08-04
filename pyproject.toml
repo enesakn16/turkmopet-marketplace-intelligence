@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "turkmopet-marketplace-intelligence"
-version = "0.4.0"
+version = "0.5.0"
 description = "Explainable marketplace pricing and profitability analysis for motorcycle parts"
 readme = "README.md"
 requires-python = ">=3.11"
