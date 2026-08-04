@@ -17,6 +17,16 @@ marketplace-performance-compare \
   --output reports/2026-07-marketplace-change.csv
 ```
 
+Kritik alarmları kalıcı operasyon görevlerine dönüştürmek için:
+
+```bash
+marketplace-performance-compare \
+  --previous reports/2026-06-marketplace-performance.csv \
+  --current reports/2026-07-marketplace-performance.csv \
+  --output reports/2026-07-marketplace-change.csv \
+  --task-database data/marketplace-tasks.db
+```
+
 Eşikler gerektiğinde değiştirilebilir:
 
 ```bash
@@ -29,6 +39,19 @@ marketplace-performance-compare \
 ```
 
 Uyarı eşiği kritik eşikten küçük olmalıdır. Oranlar `0` ile `1` arasında verilir.
+
+## Görev tekilleştirme ve güvenlik
+
+Her kritik kanal için `marketplace-decline:<normalize kanal adı>` biçiminde kararlı bir görev anahtarı üretilir. Aynı rapor tekrar işlendiğinde mükerrer görev açılmaz; güncel düşüş oranı, kaybedilen katkı kârı ve önerilen kontrol adımı yenilenir.
+
+Tekrar senkronizasyonda operatörün yönettiği şu alanlar korunur:
+
+- `status`
+- `assignee`
+- `resolution_note`
+- `created_at`
+
+Görevler varsayılan olarak `OPEN` durumunda oluşturulur. Araç herhangi bir fiyatı, stoğu veya pazaryeri ayarını otomatik değiştirmez.
 
 ## Çıktı alanları
 
@@ -43,6 +66,4 @@ Karşılaştırma raporuna iki alan eklenir:
 
 - Kritik alarm yoksa komut `0` döner.
 - En az bir kritik alarm varsa komut `1` döner.
-- Girdi veya eşik hatasında komut `2` döner.
-
-Araç fiyat, stok veya pazaryeri ayarlarını otomatik değiştirmez. Çıktı yalnızca inceleme ve aksiyon önceliklendirmesi içindir.
+- Girdi, veritabanı veya eşik hatasında komut `2` döner.
