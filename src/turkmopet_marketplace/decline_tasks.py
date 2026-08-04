@@ -1,0 +1,119 @@
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Iterable
+
+from .performance_compare import PerformanceChange
+
+
+@dataclass(frozen=True, slots=True)
+class DeclineTask:
+    task_key: str
+    marketplace: str
+    alert_level: str
+    movement: str
+    profit_delta: str
+    profit_change_rate: str | None
+    recommended_action: str
+
+
+def _task_key(change: PerformanceChange) -> str:
+    normalized = "-".join(change.marketplace.casefold().split())
+    return f"marketplace-decline:{normalized}"
+
+
+def _recommended_action(change: PerformanceChange) -> str:
+    if change.movement == "missing":
+        return "Kanalın güncel dönem verisini, entegrasyon akışını ve satış görünürlüğünü kontrol et."
+    if change.previous_profit == 0 and change.current_profit < 0:
+        return "Komisyon, kargo, iskonto ve ürün maliyeti kalemlerini kontrol ederek zarar nedenini belirle."
+    return "Satış adedi, fiyat, komisyon, kargo ve ürün maliyeti değişimlerini karşılaştır; kaybın ana nedenini kaydet."
+
+
+def build_decline_tasks(changes: Iterable[PerformanceChange]) -> tuple[DeclineTask, ...]:
+    tasks = []
+    for change in changes:
+        if change.alert_level != "critical":
+            continue
+        tasks.append(
+            DeclineTask(
+                task_key=_task_key(change),
+                marketplace=change.marketplace,
+                alert_level=change.alert_level,
+                movement=change.movement,
+                profit_delta=str(change.profit_delta),
+                profit_change_rate=(
+                    None if change.profit_change_rate is None else str(change.profit_change_rate)
+                ),
+                recommended_action=_recommended_action(change),
+            )
+        )
+    return tuple(tasks)
+
+
+def synchronize_decline_tasks(
+    changes: Iterable[PerformanceChange], database: str | Path
+) -> tuple[DeclineTask, ...]:
+    destination = Path(database)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    tasks = build_decline_tasks(changes)
+    now = datetime.now(UTC).isoformat()
+
+    with sqlite3.connect(destination) as connection:
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS marketplace_decline_tasks (
+                task_key TEXT PRIMARY KEY,
+                marketplace TEXT NOT NULL,
+                alert_level TEXT NOT NULL,
+                movement TEXT NOT NULL,
+                profit_delta TEXT NOT NULL,
+                profit_change_rate TEXT,
+                recommended_action TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'OPEN',
+                assignee TEXT NOT NULL DEFAULT '',
+                resolution_note TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+            """
+        )
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS idx_marketplace_decline_tasks_queue
+            ON marketplace_decline_tasks(status, alert_level, marketplace)
+            """
+        )
+        for task in tasks:
+            connection.execute(
+                """
+                INSERT INTO marketplace_decline_tasks (
+                    task_key, marketplace, alert_level, movement,
+                    profit_delta, profit_change_rate, recommended_action,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(task_key) DO UPDATE SET
+                    marketplace = excluded.marketplace,
+                    alert_level = excluded.alert_level,
+                    movement = excluded.movement,
+                    profit_delta = excluded.profit_delta,
+                    profit_change_rate = excluded.profit_change_rate,
+                    recommended_action = excluded.recommended_action,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    task.task_key,
+                    task.marketplace,
+                    task.alert_level,
+                    task.movement,
+                    task.profit_delta,
+                    task.profit_change_rate,
+                    task.recommended_action,
+                    now,
+                    now,
+                ),
+            )
+    return tasks
