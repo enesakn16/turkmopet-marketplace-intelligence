@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Iterable
 
 from .performance_compare import PerformanceChange
+from .task_lifecycle import reconcile_recovered_tasks, task_key_for_marketplace
 
 
 @dataclass(frozen=True, slots=True)
@@ -21,8 +22,7 @@ class DeclineTask:
 
 
 def _task_key(change: PerformanceChange) -> str:
-    normalized = "-".join(change.marketplace.casefold().split())
-    return f"marketplace-decline:{normalized}"
+    return task_key_for_marketplace(change.marketplace)
 
 
 def _recommended_action(change: PerformanceChange) -> str:
@@ -59,7 +59,8 @@ def synchronize_decline_tasks(
 ) -> tuple[DeclineTask, ...]:
     destination = Path(database)
     destination.parent.mkdir(parents=True, exist_ok=True)
-    tasks = build_decline_tasks(changes)
+    change_list = tuple(changes)
+    tasks = build_decline_tasks(change_list)
     now = datetime.now(UTC).isoformat()
 
     with sqlite3.connect(destination) as connection:
@@ -87,6 +88,7 @@ def synchronize_decline_tasks(
             ON marketplace_decline_tasks(status, alert_level, marketplace)
             """
         )
+        reconcile_recovered_tasks(connection, change_list)
         for task in tasks:
             connection.execute(
                 """
