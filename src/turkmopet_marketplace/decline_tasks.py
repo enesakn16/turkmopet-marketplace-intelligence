@@ -7,7 +7,11 @@ from pathlib import Path
 from typing import Iterable
 
 from .performance_compare import PerformanceChange
-from .task_lifecycle import reconcile_recovered_tasks, task_key_for_marketplace
+from .task_lifecycle import (
+    AUTO_RESOLUTION_NOTE,
+    reconcile_recovered_tasks,
+    task_key_for_marketplace,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +108,15 @@ def synchronize_decline_tasks(
                     profit_delta = excluded.profit_delta,
                     profit_change_rate = excluded.profit_change_rate,
                     recommended_action = excluded.recommended_action,
+                    status = CASE
+                        WHEN marketplace_decline_tasks.status = 'AUTO_RESOLVED' THEN 'OPEN'
+                        ELSE marketplace_decline_tasks.status
+                    END,
+                    resolution_note = CASE
+                        WHEN marketplace_decline_tasks.status = 'AUTO_RESOLVED'
+                         AND marketplace_decline_tasks.resolution_note = ? THEN ''
+                        ELSE marketplace_decline_tasks.resolution_note
+                    END,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -116,6 +129,7 @@ def synchronize_decline_tasks(
                     task.recommended_action,
                     now,
                     now,
+                    AUTO_RESOLUTION_NOTE,
                 ),
             )
     return tasks
