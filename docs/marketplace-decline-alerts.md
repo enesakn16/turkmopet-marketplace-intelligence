@@ -46,10 +46,12 @@ Her kritik kanal için `marketplace-decline:<normalize kanal adı>` biçiminde k
 
 Tekrar senkronizasyonda operatörün yönettiği şu alanlar korunur:
 
-- `status`
 - `assignee`
-- `resolution_note`
 - `created_at`
+- manuel `RESOLVED` durumu
+- operatör tarafından yazılmış `resolution_note`
+
+Kritik alarm sona erdiğinde açık veya devam eden görev `AUTO_RESOLVED` olur. Aynı kanal daha sonra yeniden kritik seviyeye düşerse bu otomatik kapatılmış görev tekrar `OPEN` durumuna alınır; yeni bir mükerrer görev oluşturulmaz. Sistem tarafından yazılan otomatik çözüm notu temizlenir, fakat operatörün kendi çözüm notu korunur. Manuel `RESOLVED` görevler tekrar kritik alarmda bile otomatik açılmaz.
 
 Görevler varsayılan olarak `OPEN` durumunda oluşturulur. Araç herhangi bir fiyatı, stoğu veya pazaryeri ayarını otomatik değiştirmez.
 
