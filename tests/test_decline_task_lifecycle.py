@@ -65,6 +65,41 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
             self.assertEqual("AUTO_RESOLVED", status)
             self.assertEqual("Komisyon düzeltildi", note)
 
+    def test_recurring_critical_alarm_reopens_auto_resolved_task(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "tasks.db"
+            synchronize_decline_tasks([self.change("critical", "700")], database)
+            synchronize_decline_tasks([self.change("stable", "980")], database)
+            synchronize_decline_tasks([self.change("critical", "650")], database)
+
+            with sqlite3.connect(database) as connection:
+                status, note, profit_delta = connection.execute(
+                    "SELECT status, resolution_note, profit_delta FROM marketplace_decline_tasks"
+                ).fetchone()
+
+            self.assertEqual("OPEN", status)
+            self.assertEqual("", note)
+            self.assertEqual("-350", profit_delta)
+
+    def test_recurring_critical_alarm_preserves_operator_note(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "tasks.db"
+            synchronize_decline_tasks([self.change("critical", "700")], database)
+            with sqlite3.connect(database) as connection:
+                connection.execute(
+                    "UPDATE marketplace_decline_tasks SET status = 'IN_PROGRESS', resolution_note = 'Komisyon düzeltildi'"
+                )
+            synchronize_decline_tasks([self.change("warning", "900")], database)
+            synchronize_decline_tasks([self.change("critical", "650")], database)
+
+            with sqlite3.connect(database) as connection:
+                status, note = connection.execute(
+                    "SELECT status, resolution_note FROM marketplace_decline_tasks"
+                ).fetchone()
+
+            self.assertEqual("OPEN", status)
+            self.assertEqual("Komisyon düzeltildi", note)
+
     def test_manual_resolution_is_not_overwritten(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "tasks.db"
@@ -74,6 +109,7 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
                     "UPDATE marketplace_decline_tasks SET status = 'RESOLVED', resolution_note = 'Operatör kapattı'"
                 )
             synchronize_decline_tasks([self.change("stable", "980")], database)
+            synchronize_decline_tasks([self.change("critical", "650")], database)
 
             with sqlite3.connect(database) as connection:
                 status, note = connection.execute(
