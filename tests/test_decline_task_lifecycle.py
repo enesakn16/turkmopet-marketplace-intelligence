@@ -81,6 +81,35 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
             self.assertEqual("", note)
             self.assertEqual("-350", profit_delta)
 
+    def test_lifecycle_transitions_are_recorded_as_audit_events(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "tasks.db"
+            synchronize_decline_tasks([self.change("critical", "700")], database)
+            synchronize_decline_tasks([self.change("stable", "980")], database)
+            synchronize_decline_tasks([self.change("critical", "650")], database)
+
+            with sqlite3.connect(database) as connection:
+                events = connection.execute(
+                    """
+                    SELECT event_type, previous_status, new_status, note
+                    FROM marketplace_decline_task_events
+                    ORDER BY event_id
+                    """
+                ).fetchall()
+
+            self.assertEqual(
+                [
+                    ("AUTO_RESOLVED", "OPEN", "AUTO_RESOLVED", AUTO_RESOLUTION_NOTE),
+                    (
+                        "REOPENED_CRITICAL",
+                        "AUTO_RESOLVED",
+                        "OPEN",
+                        "Kanal yeniden kritik alarm seviyesine geldi.",
+                    ),
+                ],
+                events,
+            )
+
     def test_recurring_critical_alarm_preserves_operator_note(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             database = Path(directory) / "tasks.db"
@@ -115,9 +144,13 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
                 status, note = connection.execute(
                     "SELECT status, resolution_note FROM marketplace_decline_tasks"
                 ).fetchone()
+                events = connection.execute(
+                    "SELECT COUNT(*) FROM marketplace_decline_task_events"
+                ).fetchone()[0]
 
             self.assertEqual("RESOLVED", status)
             self.assertEqual("Operatör kapattı", note)
+            self.assertEqual(0, events)
 
 
 if __name__ == "__main__":
