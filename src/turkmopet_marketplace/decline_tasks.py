@@ -9,7 +9,9 @@ from typing import Iterable
 from .performance_compare import PerformanceChange
 from .task_lifecycle import (
     AUTO_RESOLUTION_NOTE,
+    ensure_task_event_schema,
     reconcile_recovered_tasks,
+    record_task_event,
     task_key_for_marketplace,
 )
 
@@ -92,8 +94,14 @@ def synchronize_decline_tasks(
             ON marketplace_decline_tasks(status, alert_level, marketplace)
             """
         )
+        ensure_task_event_schema(connection)
         reconcile_recovered_tasks(connection, change_list)
         for task in tasks:
+            existing = connection.execute(
+                "SELECT status FROM marketplace_decline_tasks WHERE task_key = ?",
+                (task.task_key,),
+            ).fetchone()
+            previous_status = None if existing is None else str(existing[0])
             connection.execute(
                 """
                 INSERT INTO marketplace_decline_tasks (
@@ -132,4 +140,14 @@ def synchronize_decline_tasks(
                     AUTO_RESOLUTION_NOTE,
                 ),
             )
+            if previous_status == "AUTO_RESOLVED":
+                record_task_event(
+                    connection,
+                    task_key=task.task_key,
+                    event_type="REOPENED_CRITICAL",
+                    previous_status="AUTO_RESOLVED",
+                    new_status="OPEN",
+                    note="Kanal yeniden kritik alarm seviyesine geldi.",
+                    created_at=now,
+                )
     return tasks
