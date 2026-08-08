@@ -53,6 +53,8 @@ Tekrar senkronizasyonda operatörün yönettiği şu alanlar korunur:
 
 Kritik alarm sona erdiğinde açık veya devam eden görev `AUTO_RESOLVED` olur. Aynı kanal daha sonra yeniden kritik seviyeye düşerse bu otomatik kapatılmış görev tekrar `OPEN` durumuna alınır; yeni bir mükerrer görev oluşturulmaz. Sistem tarafından yazılan otomatik çözüm notu temizlenir, fakat operatörün kendi çözüm notu korunur. Manuel `RESOLVED` görevler tekrar kritik alarmda bile otomatik açılmaz.
 
+Otomatik yaşam döngüsü geçişleri `marketplace_decline_task_events` tablosuna eklemeli denetim kaydı olarak yazılır. Her kayıt görev anahtarını, olay türünü, önceki/yeni durumu, açıklamayı ve zaman damgasını taşır. `AUTO_RESOLVED` ve tekrar kritikleşme sonucu `OPEN` geçişleri böylece geçmiş görev satırını ezmeden izlenebilir. Manuel `RESOLVED` kararları otomatik event üretmez ve sistem tarafından değiştirilmez.
+
 Görevler varsayılan olarak `OPEN` durumunda oluşturulur. Araç herhangi bir fiyatı, stoğu veya pazaryeri ayarını otomatik değiştirmez.
 
 ## Çıktı alanları
