@@ -99,6 +99,12 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
 
             self.assertEqual(
                 [
+                    (
+                        "CREATED_CRITICAL",
+                        "ABSENT",
+                        "OPEN",
+                        "Kritik alarm için operasyon görevi oluşturuldu.",
+                    ),
                     ("AUTO_RESOLVED", "OPEN", "AUTO_RESOLVED", AUTO_RESOLUTION_NOTE),
                     (
                         "REOPENED_CRITICAL",
@@ -109,6 +115,19 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
                 ],
                 events,
             )
+
+    def test_repeated_critical_sync_does_not_duplicate_creation_event(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            database = Path(directory) / "tasks.db"
+            synchronize_decline_tasks([self.change("critical", "700")], database)
+            synchronize_decline_tasks([self.change("critical", "650")], database)
+
+            with sqlite3.connect(database) as connection:
+                events = connection.execute(
+                    "SELECT event_type FROM marketplace_decline_task_events ORDER BY event_id"
+                ).fetchall()
+
+            self.assertEqual([("CREATED_CRITICAL",)], events)
 
     def test_recurring_critical_alarm_preserves_operator_note(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -145,12 +164,12 @@ class DeclineTaskLifecycleTests(unittest.TestCase):
                     "SELECT status, resolution_note FROM marketplace_decline_tasks"
                 ).fetchone()
                 events = connection.execute(
-                    "SELECT COUNT(*) FROM marketplace_decline_task_events"
-                ).fetchone()[0]
+                    "SELECT event_type FROM marketplace_decline_task_events ORDER BY event_id"
+                ).fetchall()
 
             self.assertEqual("RESOLVED", status)
             self.assertEqual("Operatör kapattı", note)
-            self.assertEqual(0, events)
+            self.assertEqual([("CREATED_CRITICAL",)], events)
 
 
 if __name__ == "__main__":
