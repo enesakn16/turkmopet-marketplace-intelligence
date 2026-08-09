@@ -140,7 +140,17 @@ def synchronize_decline_tasks(
                     AUTO_RESOLUTION_NOTE,
                 ),
             )
-            if previous_status == "AUTO_RESOLVED":
+            if previous_status is None:
+                record_task_event(
+                    connection,
+                    task_key=task.task_key,
+                    event_type="CREATED_CRITICAL",
+                    previous_status="ABSENT",
+                    new_status="OPEN",
+                    note="Kritik alarm için operasyon görevi oluşturuldu.",
+                    created_at=now,
+                )
+            elif previous_status == "AUTO_RESOLVED":
                 record_task_event(
                     connection,
                     task_key=task.task_key,
